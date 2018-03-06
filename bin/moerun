@@ -1,0 +1,80 @@
+#!/bin/bash
+
+SCRIPT_NAME=`basename $0`
+CONTAINER_NAME=""
+HOST_PORT=""
+PROJECT_NAME=""
+MOUNT_DIR=""
+VERSION=""
+
+function usage(){
+	echo
+	echo "Usage:	'./${SCRIPT_NAME} -n CONTAINER_NAME -p HOST_PORT -d MOUNT_DIR -v DOCKER_VERSION'"
+	echo
+	echo "Argument description:"
+	echo
+	echo "	CONTAINER_NAME: 	customize your docker container name"
+	echo "	HOST_PORT:  		the proxy_pass port of nginx on host for application"
+	echo "	MOUNT_DIR:		    the application persistence path on host, e.g., logs, assets directory should be in there"
+	echo "	DOCKER_VERSION:		the moeee/tomcat version"
+	echo
+}
+
+while getopts :n:p:d:h:v opt
+do
+	case "$opt" in
+	n)
+		CONTAINER_NAME=$OPTARG
+	;;
+	p)
+		HOST_PORT=$OPTARG
+	;;
+	v)
+    	VERSION=$OPTARG
+    ;;
+	d)
+		MOUNT_DIR=$OPTARG
+		if [ ! -d "${MOUNT_DIR}" ]; then
+                        echo "${PROJECT_NAME} dosen't exist."
+                        exit 1
+                fi
+		if [ ! -d "${MOUNT_DIR}/webapps" ]; then
+                	echo "create webapps directory"
+			mkdir ${MOUNT_DIR}/webapps;
+		fi
+		PROJECT_NAME=`basename ${MOUNT_DIR}`
+		if [ ! -e "${MOUNT_DIR}/${PROJECT_NAME}.war" ]; then
+                        echo "${PROJECT_NAME}.war dosen't exist."
+			exit 1
+                fi
+	;;
+	h)
+		usage
+		exit
+	;;
+	?)
+		echo
+		echo "'-$OPTARG' is not an option."
+		echo "See './${SCRIPT_NAME} -h'"
+		usage
+		exit 1
+	;;
+	esac
+done
+
+echo "#!/bin/bash 
+ln -s /mnt/config/* /mnt/${PROJECT_NAME}/
+exec /mnt/${PROJECT_NAME}/bin/startup" >> ${MOUNT_DIR}/start
+chmod 777 ${MOUNT_DIR}/start
+
+echo "OPTARG:"
+echo "	CONTAINER_NAME:		${CONTAINER_NAME}"
+echo "	HOST_PORT:		    ${HOST_PORT}"
+echo "	MOUNT_DIR:		    ${MOUNT_DIR}"
+echo "  PROJECT_NAME:		${PROJECT_NAME}"
+echo "  VERSION:		    ${VERSION}"
+echo
+echo "start docker run"
+
+docker run -d --name "$CONTAINER_NAME" -p $HOST_PORT:8080 -v ${MOUNT_DIR}:/mnt/${PROJECT_NAME} moeee/tomcat:v${VERSION} /mnt/${PROJECT_NAME}/start
+
